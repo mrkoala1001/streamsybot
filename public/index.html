@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MovieBot - Streaming Tanpa Iklan</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        :root {
+            --primary: #e50914;
+            --bg: #0a0a0a;
+            --surface: #141414;
+            --text: #ffffff;
+            --text-dim: #b3b3b3;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: var(--bg); 
+            color: var(--text);
+            overflow-x: hidden;
+        }
+
+        /* Layout Structure */
+        .wrapper { display: flex; min-height: 100vh; }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 80px;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .logo { 
+            color: var(--primary); 
+            font-weight: 900; 
+            font-size: 10px; 
+            text-transform: uppercase;
+            margin-bottom: 40px;
+            letter-spacing: 1px;
+        }
+
+        .nav-item {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 30px;
+            writing-mode: vertical-rl;
+            transform: rotate(180deg);
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .nav-item:hover, .nav-item.active { color: var(--text); border-left: 2px solid var(--primary); }
+
+        /* Main Content */
+        .main {
+            margin-left: 80px;
+            flex: 1;
+            padding: 20px;
+        }
+
+        /* Header / Search */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        .search-container { position: relative; width: 300px; }
+        .search-box {
+            width: 100%;
+            background: var(--surface);
+            border: 1px solid #333;
+            padding: 8px 15px;
+            border-radius: 20px;
+            color: #fff;
+            outline: none;
+            font-size: 13px;
+        }
+
+        /* Live Search Dropdown */
+        #live-search-results {
+            position: absolute;
+            top: 45px;
+            left: 0;
+            width: 100%;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            z-index: 1000;
+            display: none;
+            max-height: 400px;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .live-item {
+            display: flex;
+            padding: 10px;
+            gap: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #222;
+        }
+
+        .live-item:hover { background: #222; }
+        .live-item img { width: 40px; height: 60px; object-fit: cover; border-radius: 4px; }
+        .live-item div h4 { font-size: 12px; margin-bottom: 2px; }
+        .live-item div p { font-size: 10px; color: var(--text-dim); }
+
+        /* Movie Grids */
+        .section-header { margin: 30px 0 15px; }
+        .movie-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 15px;
+        }
+
+        .movie-card {
+            background: var(--surface);
+            border-radius: 8px;
+            overflow: hidden;
+            transition: 0.3s;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .movie-card:hover { transform: scale(1.05); }
+        .movie-card img { width: 100%; height: 200px; object-fit: cover; }
+        .movie-card-info { padding: 10px; }
+        .movie-card h3 { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* Detail Page Overlay */
+        #detail-page {
+            position: fixed;
+            top: 0; left: 80px; right: 0; bottom: 0;
+            background: var(--bg);
+            z-index: 200;
+            display: none;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .detail-layout { display: flex; gap: 30px; flex-wrap: wrap; }
+        .player-content { flex: 2; min-width: 300px; }
+        .sidebar-content { flex: 1; min-width: 250px; }
+
+        .player-container {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        /* Episode Elements */
+        .episode-section {
+            background: #111;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .season-select {
+            background: #222;
+            color: #fff;
+            border: 1px solid #444;
+            padding: 8px;
+            width: 100%;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            outline: none;
+        }
+
+        .episode-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+            gap: 8px;
+        }
+
+        .ep-btn {
+            background: #333;
+            color: #fff;
+            border: none;
+            padding: 8px;
+            text-align: center;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: 0.2s;
+        }
+
+        .ep-btn:hover, .ep-btn.active { background: var(--primary); }
+
+        .srv-list {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .srv-btn {
+            background: #111;
+            border: 1px solid #333;
+            padding: 12px;
+            border-radius: 6px;
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            transition: 0.3s;
+        }
+
+        .srv-btn.unmasked { border-color: #2ecc7155; }
+        .srv-btn.unmasked.active { border-color: #2ecc71; background: rgba(46, 204, 113, 0.1); }
+        .srv-btn.active { border-color: var(--primary); background: #1a1a1a; }
+        .srv-btn span:first-child { color: var(--primary); font-weight: bold; font-size: 10px; }
+        .srv-btn span:last-child { font-size: 12px; }
+
+        .back-btn {
+            padding: 8px 15px;
+            background: #333;
+            border-radius: 4px;
+            cursor: pointer;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .sidebar { width: 100%; height: 60px; flex-direction: row; bottom: 0; top: auto; justify-content: center; padding: 0; }
+            .nav-item { writing-mode: horizontal-tb; transform: none; margin: 0 15px; }
+            .main { margin-left: 0; padding-bottom: 80px; }
+            #detail-page { left: 0; padding-bottom: 80px; }
+            .sidebar-content { flex: none; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="wrapper">
+        <div class="sidebar">
+            <div class="logo">MovieBot</div>
+            <div class="nav-item active" onclick="loadCategory('movies', this)">Film</div>
+            <div class="nav-item" onclick="loadCategory('series', this)">Series</div>
+        </div>
+
+        <div class="main">
+            <header>
+                <div class="search-container">
+                    <input type="text" class="search-box" placeholder="Cari film atau series..." onkeyup="handleLiveSearch(this)">
+                    <div id="live-search-results"></div>
+                </div>
+            </header>
+
+            <div id="content-area">
+                <div id="popular-section"></div>
+                <div id="latest-section"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detail Overlay -->
+    <div id="detail-page">
+        <div class="back-btn" onclick="closeDetail()">← Kembali</div>
+        <div class="detail-layout">
+            <div class="player-content">
+                <div class="player-container" id="player-container"></div>
+                <h1 id="movie-title"></h1>
+                <p id="movie-desc" style="color: var(--text-dim); font-size: 13px; margin: 15px 0;"></p>
+                
+                <!-- Episode Selector (Hidden for movies) -->
+                <div id="episode-selector" class="episode-section" style="display: none;">
+                    <select id="season-select" class="season-select" onchange="changeSeason(this.value)"></select>
+                    <div id="episode-grid" class="episode-grid"></div>
+                </div>
+
+                <div id="srv-list" class="srv-list"></div>
+            </div>
+            <div class="sidebar-content">
+                <h3>Movie Terkait</h3>
+                <div id="related-list" style="margin-top: 20px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const animals = ["Lion", "Tiger", "Wolf", "Fox", "Panda", "Koala", "Eagle", "Falcon"];
+        let currentHls = null;
+        let activeCategory = 'movies';
+        let liveSearchTimer = null;
+
+        // Poster Proxy Helper
+        const getPoster = (url) => `/api/stream/proxy-image?url=${encodeURIComponent(url)}`;
+
+        async function fetchAPI(endpoint) {
+            try {
+                const res = await fetch(endpoint);
+                return await res.json();
+            } catch (e) { return null; }
+        }
+
+        async function loadCategory(cat, el) {
+            activeCategory = cat;
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+            el.classList.add('active');
+            
+            const area = document.getElementById('content-area');
+            area.innerHTML = '<div class="loader">Memuat...</div>';
+            
+            const popular = await fetchAPI(`/api/${cat}/popular`);
+            const latest = await fetchAPI(`/api/${cat}/latest`);
+            
+            area.innerHTML = `
+                <div id="popular-section"></div>
+                <div id="latest-section"></div>
+            `;
+            
+            if (popular) displayMovies(popular.results, 'popular-section', `Populer ${cat === 'movies' ? 'Film' : 'Series'}`);
+            if (latest) displayMovies(latest.results, 'latest-section', `${cat === 'movies' ? 'Film' : 'Series'} Terbaru`);
+        }
+
+        function displayMovies(movies, containerId, title) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            container.innerHTML = `
+                <div class="section-header"><h2>${title}</h2></div>
+                <div class="movie-grid">
+                    ${movies.map(m => `
+                        <div class="movie-card" onclick="openDetail('${m.slug}', '${activeCategory}')">
+                            <img src="${getPoster(m.poster)}" alt="${m.title}" loading="lazy">
+                            <div class="movie-card-info">
+                                <h3>${m.title}</h3>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        async function handleLiveSearch(input) {
+            const results = document.getElementById('live-search-results');
+            const query = input.value.trim();
+            
+            clearTimeout(liveSearchTimer);
+            if (query.length < 2) { results.style.display = 'none'; return; }
+
+            liveSearchTimer = setTimeout(async () => {
+                const data = await fetchAPI(`/api/search?s=${encodeURIComponent(query)}`);
+                if (data && data.results && data.results.length > 0) {
+                    results.innerHTML = data.results.slice(0, 8).map(m => `
+                        <div class="live-item" onclick="openDetail('${m.slug}', 'movies')">
+                            <img src="${getPoster(m.poster)}">
+                            <div>
+                                <h4>${m.title}</h4>
+                                <p>${m.type || 'Media'}</p>
+                            </div>
+                        </div>
+                    `).join('');
+                    results.style.display = 'block';
+                } else {
+                    results.style.display = 'none';
+                }
+            }, 500);
+        }
+
+        async function openDetail(slug, type) {
+            const overlay = document.getElementById('detail-page');
+            document.getElementById('live-search-results').style.display = 'none';
+            overlay.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+
+            const data = await fetchAPI(`/api/movies/${slug}`);
+            if (data && data.result) {
+                const r = data.result;
+                document.getElementById('movie-title').innerText = r.title;
+                document.getElementById('movie-desc').innerText = r.description;
+                
+                // Show/Hide episode selector
+                const epSection = document.getElementById('episode-selector');
+                if (r.seasons && r.seasons.length > 0) {
+                    epSection.style.display = 'block';
+                    renderSeasons(r.seasons, slug);
+                } else {
+                    epSection.style.display = 'none';
+                    loadStreams(slug, 'movies');
+                }
+            }
+            loadRelated();
+        }
+
+        function renderSeasons(seasons, slug) {
+            const select = document.getElementById('season-select');
+            select.innerHTML = seasons.map(s => `<option value="${s.slug}">${s.name}</option>`).join('');
+            select.dataset.parentSlug = slug;
+            changeSeason(seasons[0].slug);
+        }
+
+        async function changeSeason(seasonSlug) {
+            const grid = document.getElementById('episode-grid');
+            grid.innerHTML = '...';
+            
+            // Re-fetch detail to get current episodes (or use cached data if available)
+            const parentSlug = document.getElementById('season-select').dataset.parentSlug;
+            const data = await fetchAPI(`/api/movies/${parentSlug}`);
+            
+            if (data && data.result && data.result.episodes) {
+                // Find which season number corresponds to this seasonSlug
+                const selectedSeasonObj = data.result.seasons.find(s => s.slug === seasonSlug);
+                const sNum = selectedSeasonObj ? selectedSeasonObj.name.replace('Season ', '') : '1';
+                
+                // Filter episodes for this season only
+                const filtered = data.result.episodes.filter(e => e.season == sNum);
+                
+                grid.innerHTML = filtered.map(e => `
+                    <button class="ep-btn" onclick="loadStreams('${e.slug}', 'series', this)">
+                        ${e.episode}
+                    </button>
+                `).join('');
+
+                // Auto-load first episode of selected season if nothing playing
+                if (filtered.length > 0 && !currentHls && !document.querySelector('iframe')) {
+                    loadStreams(filtered[0].slug, 'series', grid.querySelector('.ep-btn'));
+                }
+            }
+        }
+
+        async function loadStreams(slug, type, btnEl = null) {
+            if (btnEl) {
+                document.querySelectorAll('.ep-btn').forEach(b => b.classList.remove('active'));
+                btnEl.classList.add('active');
+            }
+            
+            const list = document.getElementById('srv-list');
+            list.innerHTML = 'Memuat Server...';
+            const data = await fetchAPI(`/api/movies/${slug}/stream`);
+            
+            if (data && data.results) {
+                list.innerHTML = data.results.map((s, i) => {
+                    const isUnmasked = s.provider.includes('(UNMASKED)');
+                    return `
+                    <button class="srv-btn ${isUnmasked ? 'unmasked' : ''}" onclick="playStream('${s.url}', this)">
+                        <span>Server ${animals[i % animals.length]} ${isUnmasked ? '✅' : ''}</span>
+                        <span>${s.provider.replace('(UNMASKED)', '').trim()}</span>
+                    </button>`;
+                }).join('');
+
+                const firstOK = data.results.find(s => s.provider.includes('(UNMASKED)'));
+                if (firstOK) playStream(firstOK.url, list.querySelector('.srv-btn.unmasked'));
+            }
+        }
+
+        function playStream(url, btn) {
+            document.querySelectorAll('.srv-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+
+            const container = document.getElementById('player-container');
+            if (url.includes('.m3u8')) {
+                const proxied = `/api/stream/proxy-m3u8?url=${encodeURIComponent(url)}`;
+                container.innerHTML = `<video id="v" controls autoplay style="width:100%;height:100%;"></video>`;
+                const v = document.getElementById('v');
+                if (currentHls) currentHls.destroy();
+                currentHls = new Hls({ maxBufferLength: 60 });
+                currentHls.loadSource(proxied);
+                currentHls.attachMedia(v);
+            } else {
+                container.innerHTML = `<iframe src="${url}" frameborder="0" allowfullscreen style="width:100%;height:100%;"></iframe>`;
+            }
+        }
+
+        async function loadRelated() {
+            const list = document.getElementById('related-list');
+            const data = await fetchAPI('/api/movies/popular');
+            if (data && data.results) {
+                list.innerHTML = data.results.slice(0, 6).map(m => `
+                    <div class="movie-card" style="margin-bottom:15px;" onclick="openDetail('${m.slug}', 'movies')">
+                        <img src="${getPoster(m.poster)}">
+                        <div class="movie-card-info"><h3>${m.title}</h3></div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function closeDetail() {
+            document.getElementById('detail-page').style.display = 'none';
+            document.body.style.overflow = 'auto';
+            if (currentHls) currentHls.destroy();
+            document.getElementById('player-container').innerHTML = '';
+        }
+
+        // Init
+        loadCategory('movies', document.querySelector('.nav-item'));
+    </script>
+</body>
+</html>
